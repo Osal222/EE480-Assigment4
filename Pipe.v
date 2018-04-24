@@ -1,4 +1,3 @@
-
 // Basic
 `define WORD      [15:0]
 `define OpCode      [15:12]
@@ -151,6 +150,7 @@ generate
 	processor U(i,ALUResult, s1Op, s1ScVal, s1altVal);
 	end
 endgenerate
+decode MyDecode(DecOp, RegDst, s0Op, IReg);
 
 always @(reset) begin
     halt = 0;
@@ -244,20 +244,20 @@ endmodule
 
 module processor(t,result,OpCode, Inst1, Inst2);
 output wire `WORD result;
+input wire `WORD resultALU;
 input [6:0] t;
 input wire `Op OpCode;
 input wire `WORD Inst1, Inst2;
-input wire `WORD resultALU;
-input [6:0] t;
-output wire `Op OpCodeALU;
-output wire `WORD Inst1ALU, Inst2ALU;
+output wire `Op OpCodeout;
+output wire `WORD Inst1out, Inst2out;
 
 generate
-	alu ALU(resultALU, OpCodeALU, Inst1ALU, Inst2ALU);
+	alu ALU(resultALU, OpCode, Inst1, Inst2);
 endgenerate
-
-
-
+assign OpCodeout = OpCode;
+assign Inst1out = Inst1;
+assign Inst2out = Inst2;
+assign result = resultALU;
 
 initial
 	 $display("Processing Element %d!\n", t);
