@@ -1,4 +1,4 @@
-# EE480-Assigment4
+
 // Basic
 `define WORD      [15:0]
 `define OpCode      [15:12]
@@ -247,8 +247,13 @@ output wire `WORD result;
 input [6:0] t;
 input wire `Op OpCode;
 input wire `WORD Inst1, Inst2;
+input wire `WORD resultALU;
+input [6:0] t;
+output wire `Op OpCodeALU;
+output wire `WORD Inst1ALU, Inst2ALU;
+
 generate
-	alu ALU(result, OpCode, Inst1, Inst2);
+	alu ALU(resultALU, OpCodeALU, Inst1ALU, Inst2ALU);
 endgenerate
 
 
