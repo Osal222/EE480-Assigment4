@@ -211,6 +211,8 @@ reg  `REGNAME s1RegDst, s2RegDst;
 reg  `WORD s2Val;
 reg  `WORD RegFile `REGSIZE;
 reg  `WORD DataMem `MEMSIZE;
+reg  `ESTACKSIZE en;
+
 
 generate 
 	alu ALU(ALUResult, s1Op, s1ScVal, s1altVal);
@@ -224,6 +226,7 @@ always @(reset) begin
     RegFile[2] = NPROC; // NPROC
     s1Op = `OpNOp;
     s2Op = `OpNOp;
+	en = -1; // all 1s
     $readmemh2(DataMem);
 end
 
