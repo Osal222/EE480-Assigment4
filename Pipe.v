@@ -125,43 +125,37 @@ end
 endmodule
 
 module control(halt, reset, clk);
-output reg halt;
+output wire halt;
 input reset, clk;
 parameter NPROC = 3;
 genvar i;
 reg  `WORD RegFile `REGSIZE;
 reg  `WORD InstMem `MEMSIZE;
 reg  `WORD DataMem `MEMSIZE;
-reg  `WORD NewPC, IReg, ScVal, altVal, DstVal;
+reg  `WORD PC, NewPC, IReg;
 wire `Op DecOp;
 wire `REGNAME RegDst;
-wire `WORD ALUResult;
 reg  `ESTACKSIZE en;
 reg  `CSTACKSIZE CallStack,Callstacktemp;
-reg  `Op s0Op, s1Op, s2Op;
-reg  `REGNAME s0Sc, s0alt, s0Dst, s0RegDst, s1RegDst, s2RegDst;
-reg  `WORD PC;
-reg  `WORD s1ScVal, s1altVal;
-reg  `WORD s2Val;
-
+reg  `Op s0Op;
+wire `Op s1Op;
+wire `WORD s1altVal, s1ScVal;
+reg  `REGNAME s0Sc, s0alt, s0Dst, s0RegDst;
 
 generate 
 	for(i = 0; i < NPROC; i = i + 1) begin:processes
-	processor#(NPROC) U(reset, i, ALUResult, s1Op, s1ScVal, s1altVal);
+	processor#(NPROC) U(halt, reset, clk, i, s1Op, s1ScVal, s1altVal, s0Op, s0RegDst, s0Sc, s0alt, PC, IReg);
 	end
 endgenerate
 decode MyDecode(DecOp, RegDst, s0Op, IReg);
 
 always @(reset) begin
-    halt = 0;
     PC = 0;
     RegFile[0] = 0; // zero
     RegFile[1] = 0; // IPROC
     RegFile[2] = 1; // NPROC
     en = -1; // all 1s
     s0Op = `OpNOp;
-    s1Op = `OpNOp;
-    s2Op = `OpNOp;
     $readmemh0(RegFile);
     $readmemh1(InstMem);
     $readmemh2(DataMem);
@@ -190,6 +184,49 @@ always @(*) begin
     end
 end
 
+//Stage: 1 Inst Fetch
+always @(posedge clk) if (!halt) begin
+    s0Op <= (DecOp == `OpTrap) ? `OpNOp : DecOp;
+    s0RegDst <= (DecOp == `OpTrap) ? 0 : RegDst;
+    s0Sc <= IReg`Sc;
+    s0alt <=IReg `alt;
+    PC <= NewPC;
+end
+endmodule
+
+module processor#(parameter NPROC = 0)(halt, reset, clk, IPROC, s1Op, s1ScVal, s1altVal, s0Op, s0RegDst, s0Sc, s0alt, PC, IReg);
+input reset, clk;
+input [6:0] IPROC;
+input wire `Op OpCode;
+input wire `Op s0Op;
+input wire `REGNAME s0Sc, s0alt, s0Dst, s0RegDst;
+input wire `WORD PC, IReg;
+output reg `Op s1Op;
+output reg halt;
+output reg `WORD s1ScVal, s1altVal;
+wire `WORD ALUResult;
+reg  `WORD ScVal, altVal, DstVal;
+reg  `Op s2Op;
+reg  `REGNAME s1RegDst, s2RegDst;
+reg  `WORD s2Val;
+reg  `WORD RegFile `REGSIZE;
+reg  `WORD DataMem `MEMSIZE;
+
+generate 
+	alu ALU(ALUResult, s1Op, s1ScVal, s1altVal);
+endgenerate
+
+always @(reset) begin
+    halt = 0;
+    $readmemh0(RegFile);
+    RegFile[0] = 0; // zero
+    RegFile[1] = IPROC; // IPROC
+    RegFile[2] = NPROC; // NPROC
+    s1Op = `OpNOp;
+    s2Op = `OpNOp;
+    $readmemh2(DataMem);
+end
+
 // compute RR ScVal, with value forwarding...
 always @(*)
   if ((s0Op == `OpJump) || (s0Op == `OpJumpf) || (s0Op == `OpCall) || (s0Op == `OpLI8) || (s0Op == `OpLU8))      
@@ -210,18 +247,9 @@ always @(*)
     else  altVal = (s1RegDst && (s0alt == s1RegDst)) ? ALUResult :
         ((s0alt == s2RegDst)) ? s2Val :RegFile[s0alt];
 
+/////////Stage 2-4 go here/////////
 
-
-// Inst Fetch
-always @(posedge clk) if (!halt) begin
-    s0Op <= (DecOp == `OpTrap) ? `OpNOp : DecOp;
-    s0RegDst <= (DecOp == `OpTrap) ? 0 : RegDst;
-    s0Sc <= IReg`Sc;
-    s0alt <=IReg `alt;
-    PC <= NewPC;
-end
-
-// Register Read
+//Stage: 2 Register Read
 always @(posedge clk) if (!halt) begin
     s1Op <= s0Op;
     s1RegDst <= s0RegDst;
@@ -229,7 +257,7 @@ always @(posedge clk) if (!halt) begin
     s1altVal <= altVal;
 end
 
-// ALU and data memory Operations
+//Stage: 3 ALU and data memory Operations
 always @(posedge clk) if (!halt) begin
     s2Op <= s1Op;
     s2RegDst <= s1RegDst;
@@ -237,33 +265,10 @@ always @(posedge clk) if (!halt) begin
     if (s1Op == `OpStore) DataMem[s1ScVal] <= s1altVal;
 end
 
-// Register Write
+//Stage: 4  Register Write
 always @(posedge clk) if (!halt) begin
     if (s2RegDst != 0) RegFile[s2RegDst] <= s2Val;
 end
-endmodule
-
-module processor#(parameter NPROC = 0)(reset, IPROC,result,OpCode, Inst1, Inst2);
-output wire `WORD result;
-input [6:0] IPROC;
-input wire `Op OpCode;
-input wire reset;
-input wire `WORD Inst1, Inst2;
-reg  `WORD RegFile `REGSIZE;
-reg  `WORD DataMem `MEMSIZE;
-
-always @(reset) begin
-    $readmemh0(RegFile);
-    RegFile[0] = 0; // zero
-    RegFile[1] = IPROC; // IPROC
-    RegFile[2] = NPROC; // NPROC
-    $readmemh2(DataMem);
-
-end
-
-generate
-	alu ALU(result, OpCode, Inst1, Inst2);
-endgenerate
 endmodule
 
 module testbench;
