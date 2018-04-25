@@ -127,7 +127,7 @@ endmodule
 module control(halt, reset, clk);
 output reg halt;
 input reset, clk;
-parameter NPROC = 20;
+parameter NPROC = 3;
 genvar i;
 reg  `WORD RegFile `REGSIZE;
 reg  `WORD InstMem `MEMSIZE;
@@ -136,7 +136,7 @@ reg  `WORD NewPC, IReg, ScVal, altVal, DstVal;
 wire `Op DecOp;
 wire `REGNAME RegDst;
 wire `WORD ALUResult;
-reg  `ESTACKSIZE en = 1;
+reg  `ESTACKSIZE en;
 reg  `CSTACKSIZE CallStack,Callstacktemp;
 reg  `Op s0Op, s1Op, s2Op;
 reg  `REGNAME s0Sc, s0alt, s0Dst, s0RegDst, s1RegDst, s2RegDst;
@@ -146,8 +146,8 @@ reg  `WORD s2Val;
 
 
 generate 
-	for(i = 1; i <= NPROC; i = i + 1) begin:processes
-	processor U(i,ALUResult, s1Op, s1ScVal, s1altVal);
+	for(i = 0; i < NPROC; i = i + 1) begin:processes
+	processor#(NPROC) U(reset, i, ALUResult, s1Op, s1ScVal, s1altVal);
 	end
 endgenerate
 decode MyDecode(DecOp, RegDst, s0Op, IReg);
@@ -165,6 +165,7 @@ always @(reset) begin
     $readmemh0(RegFile);
     $readmemh1(InstMem);
     $readmemh2(DataMem);
+
 end
 
 
@@ -242,25 +243,27 @@ always @(posedge clk) if (!halt) begin
 end
 endmodule
 
-module processor(t,result,OpCode, Inst1, Inst2);
+module processor#(parameter NPROC = 0)(reset, IPROC,result,OpCode, Inst1, Inst2);
 output wire `WORD result;
-input wire `WORD resultALU;
-input [6:0] t;
+input [6:0] IPROC;
 input wire `Op OpCode;
+input wire reset;
 input wire `WORD Inst1, Inst2;
-output wire `Op OpCodeout;
-output wire `WORD Inst1out, Inst2out;
+reg  `WORD RegFile `REGSIZE;
+reg  `WORD DataMem `MEMSIZE;
+
+always @(reset) begin
+    $readmemh0(RegFile);
+    RegFile[0] = 0; // zero
+    RegFile[1] = IPROC; // IPROC
+    RegFile[2] = NPROC; // NPROC
+    $readmemh2(DataMem);
+
+end
 
 generate
-	alu ALU(resultALU, OpCode, Inst1, Inst2);
+	alu ALU(result, OpCode, Inst1, Inst2);
 endgenerate
-assign OpCodeout = OpCode;
-assign Inst1out = Inst1;
-assign Inst2out = Inst2;
-assign result = resultALU;
-
-initial
-	 $display("Processing Element %d!\n", t);
 endmodule
 
 module testbench;
